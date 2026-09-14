@@ -1,0 +1,94 @@
+# ─── Dependencies ────────────────────────────────────────────────
+node_modules/
+/.pnp
+.pnp.js
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/sdks
+!.yarn/versions
+
+# ─── Production & Build Outputs ──────────────────────────────────
+.next/
+out/
+build/
+dist/
+
+# ─── Environment Variables & Secrets ────────────────────────────
+# NEVER commit environment secrets to git
+.env
+.env*.local
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+# Keep template environment configs tracked
+!.env.example
+!.env.template
+
+# ─── Certificates & Private Keys ─────────────────────────────────
+*.pem
+*.key
+*.cert
+*.crt
+*.p12
+*.pfx
+
+# ─── Logs & Debugging ───────────────────────────────────────────
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# ─── Deployments & Hosting Platforms ────────────────────────────
+.vercel
+.wrangler/
+.cloudflare/
+.turbo/
+.serverless/
+
+# ─── Testing & Coverage ──────────────────────────────────────────
+coverage/
+.nyc_output/
+test-results/
+
+# ─── Supabase Local CLI ──────────────────────────────────────────
+.supabase/
+
+# ─── IDE & Code Editor Settings ─────────────────────────────────
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+*.sublime-workspace
+*.sublime-project
+.fleet/
+
+# ─── Operating System Files ─────────────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Thumbs.db:encryptable
+[Dd]esktop.ini
+$RECYCLE.BIN/
+
+# ─── Temporary Files & Caches ────────────────────────────────────
+*.tmp
+*.temp
+.cache/
+*.tsbuildinfo

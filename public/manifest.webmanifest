@@ -1,0 +1,11 @@
+{
+  "name": "SETU — Societal Innovation Collaboration Portal",
+  "short_name": "SETU",
+  "description": "Crowdsource societal challenges, route them to universities, fund them with industry. SIH26043, Government of Jharkhand.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0B211C",
+  "theme_color": "#0B211C",
+  "lang": "en-IN",
+  "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}
