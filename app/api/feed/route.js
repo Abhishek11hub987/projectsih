@@ -11,7 +11,7 @@ export async function GET() {
   try {
     const r = await fetch(
       url +
-        "/rest/v1/problems?select=title,category,district,status,votes,created_at" +
+        "/rest/v1/problems?select=title,category,district,status,demo_votes,created_at" +
         "&order=created_at.desc&limit=8",
       {
         headers: { apikey: anon, Authorization: "Bearer " + anon },
@@ -25,7 +25,7 @@ export async function GET() {
       category: p.category,
       district: p.district,
       status: p.status,
-      votes: p.votes ?? 0,
+      votes: p.demo_votes ?? 0,
     }));
     return NextResponse.json({ ok: true, items });
   } catch {

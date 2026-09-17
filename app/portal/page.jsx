@@ -48,7 +48,7 @@ export default function Portal() {
   const loadAll = useCallback(async (u) => {
     const sb = supabase();
     const [pb, pr, inr, nt, vd] = await Promise.all([
-      sb.from("problems").select("*, users!problems_routed_to_fkey(name), users!problems_submitted_by_fkey(name)").order("created_at", { ascending: false }).limit(200),
+      sb.from("problems").select("*, routed_to_user:users!problems_routed_to_fkey(name), submitted_by_user:users!problems_submitted_by_fkey(name)").order("created_at", { ascending: false }).limit(200),
       sb.from("proposals").select("*, problem:problems(title,category,district,status)").order("created_at", { ascending: false }).limit(100),
       sb.from("industry_interest").select("*, proposal:proposals(*, problem:problems(title,category,district,status))").order("created_at", { ascending: false }).limit(100),
       sb.from("notifications").select("*").order("created_at", { ascending: false }).limit(30),
@@ -93,7 +93,7 @@ export default function Portal() {
   const problemWithMeta = (p) => ({
     ...p,
     votes: (p.votes ?? p.demo_votes ?? 0),
-    routed_to_name: p.users ? (Array.isArray(p.users) ? p.users[0]?.name : p.users.name) : null,
+    routed_to_name: p.routed_to_user ? (Array.isArray(p.routed_to_user) ? p.routed_to_user[0]?.name : p.routed_to_user.name) : null,
     viewer_voted: votedIds.has(p.id),
   });
 
@@ -143,7 +143,7 @@ export default function Portal() {
         votedIds={votedIds} onVote={vote} onSignOut={signOut} push={push}
         setProblems={setProblems} loadAll={() => loadAll(user)} router={router}
         view={view} setView={setView} trackId={trackId} setTrackId={setTrackId}
-        mapCat={mapCat} setMapCat={setMapCat}
+        mapCat={mapCat} setMapCat={setMapCat} problemWithMeta={problemWithMeta}
       />
     );
   }
@@ -165,7 +165,7 @@ export default function Portal() {
       <IndustryPortal
         user={user} proposals={proposals} myInterests={myInterests} interests={interests}
         onSignOut={signOut} push={push} loadAll={() => loadAll(user)}
-        view={view} setView={setView} trackId={trackId} setTrackId={setTrackId}
+        view={view} setView={setView} trackId={trackId} setTrackId={setTrackId} problems={problems}
       />
     );
   }
@@ -181,10 +181,11 @@ export default function Portal() {
 }
 
 /* ═══════════════════ CITIZEN ═══════════════════ */
-function CitizenPortal({ user, problems, myProblems, notifications, proposals, interests, votedIds, onVote, onSignOut, push, setProblems, loadAll, view, setView, trackId, setTrackId, mapCat, setMapCat }) {
+function CitizenPortal({ user, problems, myProblems, notifications, proposals, interests, votedIds, onVote, onSignOut, push, setProblems, loadAll, view, setView, trackId, setTrackId, mapCat, setMapCat, problemWithMeta }) {
   const [geo, setGeo] = useState(null);
-  const [form, setForm] = useState({ title: "", description: "", district: user?.district || "Ranchi" });
+  const [form, setForm] = useState({ title: "", description: "", district: user?.district || "Ranchi", address: "" });
   const [busy, setBusy] = useState(false);
+  const [autoWriting, setAutoWriting] = useState(false);
   const [aiState, setAiState] = useState(null); // {steps, verdict}
   const [photoName, setPhotoName] = useState(null);
   const [photoFile, setPhotoFile] = useState(null);
@@ -197,10 +198,33 @@ function CitizenPortal({ user, problems, myProblems, notifications, proposals, i
     ["map", "Live map", ICON.map],
   ];
 
+  async function autoDescribe() {
+    if (!form.title.trim()) {
+      push("Title missing", "Please write a short title first so the AI knows what to describe.", "warn");
+      return;
+    }
+    setAutoWriting(true);
+    try {
+      const res = await fetch("/api/suggest-description", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: form.title }),
+      });
+      const j = await res.json();
+      if (j.ok && j.description) {
+        setForm({ ...form, description: j.description });
+      } else {
+        throw new Error(j.error || "Failed to auto-write");
+      }
+    } catch (e) {
+      push("AI failed", e.message, "warn");
+    } finally {
+      setAutoWriting(false);
+    }
+  }
+
   async function submit(e) {
     e.preventDefault();
     if (!form.title.trim() || !form.description.trim()) { push("Missing fields", "Title and description are required", "warn"); return; }
-    if (!geo) { push("Location needed", "Tap “Detect my location” first", "warn"); return; }
     setBusy(true);
     setAiState({ steps: { class: "active", dedup: "", prio: "", route: "" }, verdict: null });
 
@@ -228,7 +252,7 @@ function CitizenPortal({ user, problems, myProblems, notifications, proposals, i
     try {
       const r = await fetch("/api/submit", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...form, latitude: geo.lat, longitude: geo.lng, submitted_by: user.id, photo_url }),
+        body: JSON.stringify({ ...form, latitude: geo ? geo.lat : null, longitude: geo ? geo.lng : null, submitted_by: user.id, photo_url }),
       });
       const j = await r.json();
       timers.forEach(clearTimeout);
@@ -258,7 +282,7 @@ function CitizenPortal({ user, problems, myProblems, notifications, proposals, i
         push("Problem submitted & routed", `Category: ${CAT_LABEL[j.category]} · Priority ${j.priority}`, "ok", 5000);
       }
       await loadAll();
-      setForm({ title: "", description: "", district: form.district });
+      setForm({ title: "", description: "", district: form.district, address: "" });
       setPhotoName(null);
       setPhotoFile(null);
     } catch (e2) {
@@ -273,7 +297,14 @@ function CitizenPortal({ user, problems, myProblems, notifications, proposals, i
   function detectGeo() {
     if (!navigator.geolocation) { setGeo({ lat: 23.35 + Math.random() * 0.1, lng: 85.3 + Math.random() * 0.08, approx: true }); return; }
     navigator.geolocation.getCurrentPosition(
-      (pos) => setGeo({ lat: pos.coords.latitude, lng: pos.coords.longitude, approx: false }),
+      async (pos) => {
+        setGeo({ lat: pos.coords.latitude, lng: pos.coords.longitude, approx: false });
+        try {
+          const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${pos.coords.latitude}&lon=${pos.coords.longitude}`);
+          const data = await res.json();
+          if (data && data.display_name) setForm((f) => ({ ...f, address: data.display_name }));
+        } catch (e) { console.error("Geocoding failed", e); }
+      },
       () => setGeo({ lat: 23.35 + Math.random() * 0.1, lng: 85.3 + Math.random() * 0.08, approx: true }),
       { timeout: 4000 }
     );
@@ -334,10 +365,13 @@ function CitizenPortal({ user, problems, myProblems, notifications, proposals, i
           <div className="card card-pad">
             <form onSubmit={submit}>
               <Field label="Title" required>
-                <input className="input" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="e.g. Hand pump broken near the school since 3 weeks" maxLength={120} />
+                <input className="input" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="e.g. Hand pump broken near the school since 3 weeks" maxLength={120} required />
               </Field>
-              <Field label="Describe the problem" hint="In any simple words, Hindi or English">
-                <textarea className="textarea" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="What is broken, since when, who is affected, and what help you need…" />
+              <Field label={<span style={{display: 'flex', alignItems: 'center', gap: '10px'}}>Describe the problem <button type="button" onClick={autoDescribe} disabled={autoWriting} className="btn btn-sm btn-ghost" style={{padding: '2px 8px', fontSize: 12, border: '1px solid var(--line-2)'}}>✨ {autoWriting ? "Writing..." : "AI Auto-write"}</button></span>} hint="In any simple words, Hindi or English" required>
+                <textarea className="textarea" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="What is broken, since when, who is affected, and what help you need…" required />
+              </Field>
+              <Field label="Exact Address" hint="Optional">
+                <input className="input" value={form.address || ""} onChange={(e) => setForm({ ...form, address: e.target.value })} placeholder="e.g. Near Panchayat Bhavan, Ward 4" />
               </Field>
               <div className="form-grid">
                 <Field label="District">
@@ -426,7 +460,7 @@ function CitizenPortal({ user, problems, myProblems, notifications, proposals, i
 }
 
 /* ═══════════════════ UNIVERSITY ═══════════════════ */
-function UniversityPortal({ user, routedToMe, myProposals, interests, onSignOut, push, loadAll, view, setView, trackId, setTrackId }) {
+function UniversityPortal({ user, routedToMe, myProposals, interests, onSignOut, push, loadAll, view, setView, trackId, setTrackId, problems }) {
   const [propForm, setPropForm] = useState(null); // problem being proposed on
   const [form, setForm] = useState({ lead: "", team: "", text: "", fund: 240000 });
   const [busy, setBusy] = useState(false);
@@ -563,7 +597,7 @@ function UniversityPortal({ user, routedToMe, myProposals, interests, onSignOut,
 }
 
 /* ═══════════════════ INDUSTRY ═══════════════════ */
-function IndustryPortal({ user, proposals, myInterests, interests, onSignOut, push, loadAll, view, setView }) {
+function IndustryPortal({ user, proposals, myInterests, interests, onSignOut, push, loadAll, view, setView, trackId, setTrackId, problems }) {
   const [intForm, setIntForm] = useState(null);
   const [form, setForm] = useState({ type: "funding", msg: "" });
   const [busy, setBusy] = useState(false);
@@ -577,6 +611,7 @@ function IndustryPortal({ user, proposals, myInterests, interests, onSignOut, pu
 
   const NAV = [
     ["dash", "Discover", ICON.search],
+    ["problems", "All problems", ICON.list],
     ["interests", "My engagements", ICON.heart, myInterests.length],
   ];
 
@@ -600,8 +635,8 @@ function IndustryPortal({ user, proposals, myInterests, interests, onSignOut, pu
     <Shell
       user={user} roleName="Industry / CSR" active={view}
       navItems={NAV} onNav={setView} onExit={onSignOut}
-      title={view === "dash" ? user.name : "My engagements"}
-      sub={view === "dash" ? `Focus areas: ${focus.map((f) => CAT_LABEL[f] || f).join(" · ") || "not set"} · new-proposal alerts on` : "Portfolio of funded and mentored civic projects."}
+      title={view === "dash" ? user.name : view === "problems" ? "All Civic Problems" : "My engagements"}
+      sub={view === "dash" ? `Focus areas: ${focus.map((f) => CAT_LABEL[f] || f).join(" • ") || "not set"} • new-proposal alerts on` : view === "problems" ? "Browse raw civic problems reported across the state before universities propose solutions." : "Portfolio of funded and mentored civic projects."}
     >
       {view === "dash" && (
         <>
@@ -638,6 +673,22 @@ function IndustryPortal({ user, proposals, myInterests, interests, onSignOut, pu
             })}
           </div>
         </>
+      )}
+
+      {view === "problems" && (
+        <div className="card">
+          {problems.map((p) => (
+            <div key={p.id} className="prow" style={{ gridTemplateColumns: "auto 1fr auto" }}>
+              <div className="pr-icon">{CAT_EMOJI[p.category] || "❓"}</div>
+              <div className="pr-main">
+                <h4>{p.title}</h4>
+                <div className="pr-meta"><span>{p.district || "Unknown"}</span><span>{new Date(p.created_at).toLocaleDateString("en-IN")}</span></div>
+                <p className="pr-desc">{p.description}</p>
+              </div>
+              <div className="pr-side"><span className={"badge st-" + p.status}>{STATUS_LBL[p.status] || p.status}</span></div>
+            </div>
+          ))}
+        </div>
       )}
 
       {view === "interests" && (
@@ -793,7 +844,7 @@ function AdminPortal({ user, problems, proposals, interests, notifications, onSi
                   <tr key={p.id}>
                     <td className="mono-ink tiny">{p.id.slice(0, 8)}</td>
                     <td><span className="chip" style={{ height: 22 }}><span className={"cat-dot cat-" + p.category} />{CAT_LABEL[p.category]}</span></td>
-                    <td style={{ fontWeight: 600 }}>{(Array.isArray(p.users) ? p.users[0]?.name : p.users?.name) || "—"}</td>
+                    <td style={{ fontWeight: 600 }}>{(Array.isArray(p.routed_to_user) ? p.routed_to_user[0]?.name : p.routed_to_user?.name) || "—"}</td>
                     <td><span className={"badge st-" + p.status}>{STATUS_LBL[p.status]}</span></td>
                     <td><b className="mono-ink">{(p.priority_score || 0).toFixed(1)}</b></td>
                   </tr>
@@ -948,7 +999,7 @@ function TeamRegistry({ expertise }) {
 }
 
 function ProblemDetail({ problem: p, proposals, interests, standalone }) {
-  const uniName = (Array.isArray(p.users) ? p.users[0]?.name : p.users?.name) || null;
+  const uniName = (Array.isArray(p.routed_to_user) ? p.routed_to_user[0]?.name : p.routed_to_user?.name) || null;
   return (
     <div>
       <div className="card card-pad" style={{ marginBottom: 18 }}>
