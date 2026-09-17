@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 const DEMO = {
   citizen: { email: "priya@demo.setu" },
-  university: { email: "hod.che@demo.setu" },
+  university: { email: "dean.ranchi@demo.setu" },
   industry: { email: "csr@tatasf.setu" },
   admin: { email: "admin@demo.setu" },
 };

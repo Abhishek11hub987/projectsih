@@ -1,14 +1,15 @@
 import { NextResponse } from "next/server";
 import { runPipeline } from "@/lib/ai";
 import { getAuthenticatedUser, getAdminClient } from "@/lib/server-auth";
-import { DISTRICTS } from "@/components/ui";
+
+const DISTRICTS = ["Bokaro", "Chatra", "Deoghar", "Dhanbad", "Dumka", "East Singhbhum", "Garhwa", "Giridih", "Godda", "Gumla", "Hazaribagh", "Jamtara", "Khunti", "Koderma", "Latehar", "Lohardaga", "Pakur", "Palamu", "Ramgarh", "Ranchi", "Sahibganj", "Seraikela-Kharsawan", "Simdega", "West Singhbhum"];
 
 export const maxDuration = 30;
 
 export async function POST(req) {
   /* submit a problem → classify → dedup → priority → route → insert (or merge as vote) */
   const body = await req.json().catch(() => null);
-  const { title, description, district, latitude, longitude, photo_url } = body || {};
+  const { title, description, district, latitude, longitude, photo_url, address } = body || {};
 
   if (!title?.trim() || !description?.trim() || !district) {
     return NextResponse.json({ ok: false, error: "Title, description, and district are required" }, { status: 400 });
@@ -34,6 +35,7 @@ export async function POST(req) {
       title: cleanTitle,
       description: cleanDescription,
       district: sanitizedDistrict,
+      address: address ? address.trim().slice(0, 500) : null,
       latitude: typeof latitude === "number" ? latitude : null,
       longitude: typeof longitude === "number" ? longitude : null,
       submitted_by,
@@ -78,6 +80,7 @@ export async function POST(req) {
       description: cleanDescription,
       category: cls.category,
       district: sanitizedDistrict,
+      address: address ? address.trim().slice(0, 500) : null,
       latitude: typeof latitude === "number" ? latitude : null,
       longitude: typeof longitude === "number" ? longitude : null,
       photo_url: typeof photo_url === "string" && photo_url.startsWith("http") ? photo_url : null,
